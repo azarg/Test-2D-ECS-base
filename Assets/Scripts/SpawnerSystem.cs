@@ -3,24 +3,13 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
 using Unity.Transforms;
-using Unity.Jobs;
 using Unity.Burst;
 
 
 public partial struct SpawnerSystem : ISystem
 {
-    NativeArray<Random> rngs;
-    private int rngArraySize;
-
     public void OnCreate(ref SystemState state) {
         state.RequireForUpdate<Spawner>();
-
-        rngArraySize = 200;
-        rngs = new NativeArray<Random>(rngArraySize, Allocator.Persistent);
-
-        for (int i = 0; i < rngs.Length; i++) {
-            rngs[i] = new Random((uint)UnityEngine.Random.Range(1, int.MaxValue));
-        }
     }
 
     [BurstCompile]
@@ -29,9 +18,6 @@ public partial struct SpawnerSystem : ISystem
         var spawner = SystemAPI.GetSingletonRW<Spawner>();
         var config = SystemAPI.GetSingleton<Config>();
         var random = new Random((uint)UnityEngine.Random.Range(1, int.MaxValue));
-
-        //var ecbSingleton = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>();
-        //var ecb = ecbSingleton.CreateCommandBuffer(state.WorldUnmanaged);
 
         if (spawner.ValueRO.currentBulletCount < config.maxBullets) {
             // HACK: sometimes two or more bullets can hit the same enemy at the same time
@@ -42,16 +28,6 @@ public partial struct SpawnerSystem : ISystem
             if (spawner.ValueRO.currentBulletCount <= spawner.ValueRO.currentEnemyCount) {
                 spawner.ValueRW.currentBulletCount += config.defaultBulletSpawnCount;
                 SpawnBullets(state.EntityManager, config, ref random);
-
-                // TODO: look into using a parallel job for spawning
-                // For now, it doesn't seem to provide performance benefit
-                //new BulletSpawnJob {
-                //    ecb = ecb.AsParallelWriter(),
-                //    bulletPrefab = config.bulletPrefab,
-                //    rngs = rngs,
-                //    speed = config.defaultBulletSpeed,
-                //}.Schedule(config.defaultBulletSpawnCount, 16).Complete();
-
             }
         }
 
@@ -94,32 +70,5 @@ public partial struct SpawnerSystem : ISystem
                 speed = config.defaultEnemySpeed,
             });
         }
-    }
-}
-
-/// <summary>
-/// NOT USED. Didn't seem to provide performance benefit
-/// </summary>
-[BurstCompile]
-public partial struct BulletSpawnJob : IJobParallelFor
-{
-    [ReadOnly] public Entity bulletPrefab;
-    [ReadOnly] public float speed;
-    public NativeArray<Random> rngs;
-    public EntityCommandBuffer.ParallelWriter ecb;
-
-
-    public void Execute(int index) {
-        var entity = ecb.Instantiate(index, bulletPrefab);
-
-        int rng_idx = index % rngs.Length;
-        var rng= rngs[rng_idx];
-        var dir = new float3(rng.NextFloat2Direction(), 0f);
-        rngs[rng_idx] = rng;
-
-        ecb.SetComponent<Bullet>(index, entity, new Bullet {
-            direction = dir,
-            speed = speed,
-        });
     }
 }
