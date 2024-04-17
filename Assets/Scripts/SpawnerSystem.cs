@@ -41,7 +41,7 @@ public partial struct SpawnerSystem : ISystem
             // hitting the same enemy.  
             if (spawner.ValueRO.currentBulletCount <= spawner.ValueRO.currentEnemyCount) {
                 spawner.ValueRW.currentBulletCount += config.defaultBulletSpawnCount;
-                SpawnBullets(state, config, ref random);
+                SpawnBullets(state.EntityManager, config, ref random);
 
                 // TODO: look into using a parallel job for spawning
                 // For now, it doesn't seem to provide performance benefit
@@ -59,19 +59,19 @@ public partial struct SpawnerSystem : ISystem
             // just in case... to keep the enemy and bullet counts in sync
             if (spawner.ValueRO.currentEnemyCount <= spawner.ValueRO.currentBulletCount) {
                 spawner.ValueRW.currentEnemyCount += config.defaultEnemySpawnCount;
-                SpawnEnemies(state, config, ref random);
+                SpawnEnemies(state.EntityManager, config, ref random);
             }
         }
     }
 
     [BurstCompile]
-    private void SpawnBullets(SystemState state, Config config, ref Random random) {
-        var bullets = state.EntityManager.Instantiate(config.bulletPrefab, config.defaultBulletSpawnCount, Allocator.Temp);
+    private void SpawnBullets(EntityManager em, Config config, ref Random random) {
+        var bullets = em.Instantiate(config.bulletPrefab, config.defaultBulletSpawnCount, Allocator.Temp);
 
         foreach (var bullet in bullets) {
             var dir = new float3(random.NextFloat2Direction(), 0f);
 
-            state.EntityManager.SetComponentData(bullet, new Bullet {
+            em.SetComponentData(bullet, new Bullet {
                 direction = dir,
                 speed = config.defaultBulletSpeed,
             });
@@ -79,17 +79,17 @@ public partial struct SpawnerSystem : ISystem
     }
 
     [BurstCompile]
-    private void SpawnEnemies(SystemState state, Config config, ref Random random) {
-        var enemies = state.EntityManager.Instantiate(config.enemyPrefab, config.defaultEnemySpawnCount, Allocator.Temp);
+    private void SpawnEnemies(EntityManager em, Config config, ref Random random) {
+        var enemies = em.Instantiate(config.enemyPrefab, config.defaultEnemySpawnCount, Allocator.Temp);
         foreach (var enemy in enemies) {
-            var transform = state.EntityManager.GetComponentData<LocalTransform>(enemy);
+            var transform = em.GetComponentData<LocalTransform>(enemy);
 
             var dir = new float3(random.NextFloat2Direction(), 0f);
             var pos = dir * config.spawnAreaRadius;
 
             transform.Position = pos;
-            state.EntityManager.SetComponentData(enemy, transform);
-            state.EntityManager.SetComponentData(enemy, new Enemy {
+            em.SetComponentData(enemy, transform);
+            em.SetComponentData(enemy, new Enemy {
                 direction = -dir,
                 speed = config.defaultEnemySpeed,
             });
