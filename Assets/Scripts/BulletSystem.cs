@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
+using Unity.Rendering;
 using Unity.Transforms;
 
 public partial struct BulletSystem : ISystem
@@ -32,18 +33,21 @@ public partial struct BulletSystem : ISystem
         var ecbSingleton = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>();
         var ecb = ecbSingleton.CreateCommandBuffer(state.WorldUnmanaged);
         var job = new BulletMoveJob {
+            usePooling = config.usePooling,
             physics = physics,
             deltaTime = SystemAPI.Time.DeltaTime,
             spawnAreaRadius = config.spawnAreaRadius,
             ecb = ecb.AsParallelWriter(),
         };
         job.ScheduleParallel();
+        state.Dependency.Complete();
+        
 
         // TODO: if we dont wait for the job to complete, does it mean
         // the entity command buffer is not played back, which in turn
         // means the forllowing count queries will not be accurate??
         //state.Dependency.Complete();
-        
+
         // Update enemy and bullet counts, so that spawner can keep track of counts
         var spawner = SystemAPI.GetSingletonRW<Spawner>();
         spawner.ValueRW.currentBulletCount = bulletCountQuery.CalculateEntityCount(); 
@@ -62,7 +66,10 @@ public partial struct BulletMoveJob : IJobEntity
     [ReadOnly] public PhysicsWorldSingleton physics;
     [ReadOnly] public float deltaTime;
     [ReadOnly] public float spawnAreaRadius;
+    [ReadOnly] public bool usePooling;
+
     public EntityCommandBuffer.ParallelWriter ecb;
+    
 
     public void Execute([ChunkIndexInQuery] int chunkIndex, Entity entity, ref LocalTransform transform, ref Bullet bullet) {
         float3 pos = transform.Position;
@@ -79,8 +86,14 @@ public partial struct BulletMoveJob : IJobEntity
         float maxDistance = 1f;
         float radius = 0.5f;
         if (physics.SphereCast(pos, radius, bullet.direction, maxDistance, out ColliderCastHit hitInfo, CollisionFilter.Default)) {
-            ecb.DestroyEntity(chunkIndex, hitInfo.Entity);
-            ecb.DestroyEntity(chunkIndex, entity);
+            if (usePooling) {
+                ecb.SetEnabled(chunkIndex, entity, false);
+                ecb.SetEnabled(chunkIndex, hitInfo.Entity, false);
+            }
+            else {
+                ecb.DestroyEntity(chunkIndex, hitInfo.Entity);
+                ecb.DestroyEntity(chunkIndex, entity);
+            }
         }
 
         pos += deltaTime * bullet.speed * bullet.direction;

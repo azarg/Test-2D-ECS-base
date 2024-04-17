@@ -3,8 +3,7 @@ using UnityEngine;
 
 public class SpawnerAuthoring : MonoBehaviour
 {
-    public static int frameCounter;
-
+    public bool usePooling = false;
     public float spawnAreaRadius = 100f;
 
     public int maxBullets = 1000;
@@ -22,6 +21,7 @@ public class SpawnerAuthoring : MonoBehaviour
         public override void Bake(SpawnerAuthoring authoring) {
             var entity = GetEntity(TransformUsageFlags.None);
             AddComponent(entity, new Config {
+                usePooling = authoring.usePooling,
                 bulletPrefab = GetEntity(authoring.bulletPrefab, TransformUsageFlags.Dynamic),
                 enemyPrefab = GetEntity(authoring.enemyPrefab, TransformUsageFlags.Dynamic),
                 maxBullets = authoring.maxBullets,
@@ -45,6 +45,7 @@ public struct Spawner : IComponentData
 
 public struct Config : IComponentData
 {
+    public bool usePooling;
     public Entity bulletPrefab;
     public Entity enemyPrefab;
     public int maxBullets;
