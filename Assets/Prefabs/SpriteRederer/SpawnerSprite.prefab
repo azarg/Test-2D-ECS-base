@@ -44,6 +44,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d04d05196d320764192d2e706b8d3d6c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  usePooling: 1
   spawnAreaRadius: 100
   maxBullets: 50000
   maxEnemies: 50000
