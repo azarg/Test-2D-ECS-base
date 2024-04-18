@@ -85,6 +85,10 @@ public partial struct BulletMoveJob : IJobEntity
         // to decide if enemy and / or bullet should be deleted.
         float maxDistance = 1f;
         float radius = 0.5f;
+
+        // Capsule collider can be used if enemies are sorted on the z axis
+        //float3 height = new float3(0, 0, 2f);
+        //if (physics.CapsuleCast(pos - height, pos + height, radius, bullet.direction, maxDistance, out ColliderCastHit hitInfo, CollisionFilter.Default)){ 
         if (physics.SphereCast(pos, radius, bullet.direction, maxDistance, out ColliderCastHit hitInfo, CollisionFilter.Default)) {
             if (usePooling) {
                 ecb.SetEnabled(chunkIndex, entity, false);

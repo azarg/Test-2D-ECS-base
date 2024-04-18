@@ -27,11 +27,15 @@ public partial struct EnemyMoveJob : IJobEntity
     public void Execute(ref LocalTransform transform, ref Enemy enemy) {
         float3 pos = transform.Position;
 
+        // idea for chaning the z to achieve sorting based on y axis value
+        // var doSort = true;
+        // if (doSort) pos.z = 0;
         pos += deltaTime * enemy.speed * enemy.direction;
         if (math.length(pos) > spawnAreaRadius) {
             pos = enemy.direction * spawnAreaRadius;
             enemy.direction = -enemy.direction;
         }
+        //if (doSort) pos.z = pos.y * 0.01f;
         transform.Position = pos;
     }
 }
