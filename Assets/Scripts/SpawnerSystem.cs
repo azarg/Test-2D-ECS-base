@@ -26,144 +26,113 @@ public partial struct SpawnerSystem : ISystem
             // hitting the same enemy.  
             if (spawner.ValueRO.currentBulletCount <= spawner.ValueRO.currentEnemyCount) {
                 spawner.ValueRW.currentBulletCount += config.defaultBulletSpawnCount;
-                if (config.usePooling) {
-                    SpawnBulletsPooled(state.EntityManager, config, random, ref state);
-                }
-                else {
-                    SpawnBullets(state.EntityManager, config, random);
-                }
+                SpawnBullets(config, ref random, ref state);
             }
         }
+        // need to get fresh references, since SpawnBullets
         spawner = SystemAPI.GetSingletonRW<Spawner>();
         config = SystemAPI.GetSingleton<Config>();
         if (spawner.ValueRO.currentEnemyCount < config.maxEnemies) {
             // just in case... to keep the enemy and bullet counts in sync
             if (spawner.ValueRO.currentEnemyCount <= spawner.ValueRO.currentBulletCount) {
                 spawner.ValueRW.currentEnemyCount += config.defaultEnemySpawnCount;
-                if (config.usePooling) {
-                    SpawnEnemiesPooled(state.EntityManager, config, random, ref state);
-                }
-                else
-                {
-                    SpawnEnemies(state.EntityManager, config, random);
-                }
+                SpawnEnemies(config, ref random, ref state);
             }
         }
     }
 
     [BurstCompile]
-    private void SpawnBulletsPooled(EntityManager em, Config config, Random random, ref SystemState state) {
-        // find bullets that are disabled
+    private void SpawnBullets(Config config, ref Random random, ref SystemState state) {
+        
+        var em = state.EntityManager;
+
+        // to keep track of number of bullets enabled 
         int cnt = 0;
-        var ecb = new EntityCommandBuffer(Allocator.Temp);
-        foreach (var (bullet, entity) in SystemAPI.Query<Bullet>()
-            .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
-            .WithEntityAccess()) {
-            if (em.IsEnabled(entity)) continue;
-            if (cnt < config.defaultBulletSpawnCount) {
-                //UnityEngine.Debug.Log("enabling bullet "+cnt);
-                ecb.SetEnabled(entity, true);
-                ecb.SetComponent(entity, new LocalTransform {
-                    Position = new float3(0),
-                    Rotation = quaternion.identity,
-                    Scale = 1f,
+
+        if (config.usePooling) {
+            var ecb = new EntityCommandBuffer(Allocator.Temp);
+            foreach (var (bullet, entity) in SystemAPI.Query<Bullet>()
+                .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                .WithEntityAccess()) {
+
+                if (em.IsEnabled(entity)) continue;
+                
+                if (cnt < config.defaultBulletSpawnCount) {
+                    ecb.SetEnabled(entity, true);
+                    ecb.SetComponent(entity, new LocalTransform {
+                        Position = new float3(0),
+                        Rotation = quaternion.identity,
+                        Scale = 1f,
+                    });
+                    cnt++;
+                }
+                // exit early if we've enabled enough bullets
+                else break;
+            }
+            ecb.Playback(state.EntityManager);
+        }
+
+        // instantiate more bullets if we did not enable enough bullets
+        if (cnt < config.defaultBulletSpawnCount) {
+            cnt = config.defaultBulletSpawnCount - cnt;
+            var bullets = em.Instantiate(config.bulletPrefab, cnt, Allocator.Temp);
+
+            foreach (var bullet in bullets) {
+                var dir = new float3(random.NextFloat2Direction(), 0f);
+
+                em.SetComponentData(bullet, new Bullet {
+                    direction = dir,
+                    speed = config.defaultBulletSpeed,
                 });
             }
-            else {
-                break;
-            }
-            cnt++;
-        }
-        ecb.Playback(state.EntityManager);
-        //UnityEngine.Debug.Log(cnt);
-
-        // if the count of disabled bullets is < spawn count
-        // then instantiate the difference
-        // enable the bullets that are disabled
-        if (cnt >= config.defaultBulletSpawnCount) { return; }
-
-        cnt = config.defaultBulletSpawnCount - cnt;
-        var bullets = em.Instantiate(config.bulletPrefab, cnt, Allocator.Temp);
-
-        foreach (var bullet in bullets) {
-            var dir = new float3(random.NextFloat2Direction(), 0f);
-
-            em.SetComponentData(bullet, new Bullet {
-                direction = dir,
-                speed = config.defaultBulletSpeed,
-            });
         }
     }
 
-    [BurstCompile]
-    private void SpawnBullets(EntityManager em, Config config, Random random) {
-        var bullets = em.Instantiate(config.bulletPrefab, config.defaultBulletSpawnCount, Allocator.Temp);
-
-        foreach (var bullet in bullets) {
-            var dir = new float3(random.NextFloat2Direction(), 0f);
-
-            em.SetComponentData(bullet, new Bullet {
-                direction = dir,
-                speed = config.defaultBulletSpeed,
-            });
-        }
-    }
 
     [BurstCompile]
-    private void SpawnEnemiesPooled(EntityManager em, Config config, Random random, ref SystemState state) {
+    private void SpawnEnemies(Config config, ref Random random, ref SystemState state) {
+        
+        var em = state.EntityManager;
+
         int cnt = 0;
-        var ecb = new EntityCommandBuffer(Allocator.Temp);
-        foreach(var (enemy, entity) in SystemAPI.Query<Enemy>()
-            .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
-            .WithEntityAccess()) {
-            if (em.IsEnabled(entity)) continue;
-            if (cnt < config.defaultEnemySpawnCount) {
-                ecb.SetEnabled(entity, true);
-                ecb.SetComponent(entity, new LocalTransform {
-                    Position = -enemy.direction * config.spawnAreaRadius,
-                    Rotation = quaternion.identity,
-                    Scale = 1f,
-                });
-            } 
-            else {
-                break;
+        
+        if (config.usePooling) {
+            var ecb = new EntityCommandBuffer(Allocator.Temp);
+            foreach (var (enemy, entity) in SystemAPI.Query<Enemy>()
+                .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                .WithEntityAccess()) {
+
+                if (em.IsEnabled(entity)) continue;
+                if (cnt < config.defaultEnemySpawnCount) {
+                    ecb.SetEnabled(entity, true);
+                    ecb.SetComponent(entity, new LocalTransform {
+                        Position = -enemy.direction * config.spawnAreaRadius,
+                        Rotation = quaternion.identity,
+                        Scale = 1f,
+                    });
+                    cnt++;
+                }
+                else break;
             }
-            cnt++;
+            ecb.Playback(state.EntityManager);
         }
-        ecb.Playback(state.EntityManager);
-        if (cnt >= config.defaultEnemySpawnCount) { return; }
-        cnt = config.defaultEnemySpawnCount - cnt;
-        var enemies = em.Instantiate(config.enemyPrefab, cnt, Allocator.Temp);
-        foreach (var enemy in enemies) {
-            var transform = em.GetComponentData<LocalTransform>(enemy);
 
-            var dir = new float3(random.NextFloat2Direction(), 0f);
-            var pos = dir * config.spawnAreaRadius;
+        if (cnt < config.defaultEnemySpawnCount) {
+            cnt = config.defaultEnemySpawnCount - cnt;
+            var enemies = em.Instantiate(config.enemyPrefab, cnt, Allocator.Temp);
+            foreach (var enemy in enemies) {
+                var transform = em.GetComponentData<LocalTransform>(enemy);
 
-            transform.Position = pos;
-            em.SetComponentData(enemy, transform);
-            em.SetComponentData(enemy, new Enemy {
-                direction = -dir,
-                speed = config.defaultEnemySpeed,
-            });
-        }
-    }
+                var dir = new float3(random.NextFloat2Direction(), 0f);
+                var pos = dir * config.spawnAreaRadius;
 
-    [BurstCompile]
-    private void SpawnEnemies(EntityManager em, Config config, Random random) {
-        var enemies = em.Instantiate(config.enemyPrefab, config.defaultEnemySpawnCount, Allocator.Temp);
-        foreach (var enemy in enemies) {
-            var transform = em.GetComponentData<LocalTransform>(enemy);
-
-            var dir = new float3(random.NextFloat2Direction(), 0f);
-            var pos = dir * config.spawnAreaRadius;
-
-            transform.Position = pos;
-            em.SetComponentData(enemy, transform);
-            em.SetComponentData(enemy, new Enemy {
-                direction = -dir,
-                speed = config.defaultEnemySpeed,
-            });
+                transform.Position = pos;
+                em.SetComponentData(enemy, transform);
+                em.SetComponentData(enemy, new Enemy {
+                    direction = -dir,
+                    speed = config.defaultEnemySpeed,
+                });
+            }
         }
     }
 }
